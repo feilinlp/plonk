@@ -55,6 +55,6 @@ void ntt_inverse(vector<Fr> &A, Fr omega);
  * The result size will be a.size() + b.size() - 1.
  * Input vectors will be zero-padded to the next power of 2 if needed.
  */
-vector<Fr> polynomial_multiply(vector<Fr> A, vector<Fr> B, Fr omega);
+vector<Fr> polynomial_multiply(vector<Fr> A, vector<Fr> B);
 
 #endif // NTT_HPP

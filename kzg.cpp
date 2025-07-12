@@ -54,13 +54,14 @@ Fr evaluatePoly(vector<Fr> q, Fr i) {
 }
 
 vector<Fr> divideByLinear(vector<Fr> q, Fr i) {
-    vector<Fr> result(q.size() - 1);
-
-    // Synthetic division from highest degree down
+    int n = q.size();
+    vector<Fr> result(n - 1);
     Fr carry = 0;
-    for (int j = q.size() - 1; j >= 1; --j) {
+
+    for (int j = n - 1; j >= 0; --j) {
         carry = carry * i + q[j];
-        result[j - 1] = carry;
+        if (j > 0)
+            result[j - 1] = carry;
     }
 
     return result;
