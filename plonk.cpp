@@ -1,6 +1,9 @@
 #include "plonk.hpp"
 #include "ntt.hpp"
 #include "kzg.hpp"
+#include "debug.hpp"
+#include <openssl/sha.h>
+#include <sstream>
 #include <mcl/bn.hpp>
 #include <vector>
 #include <map>
@@ -9,6 +12,33 @@
 using namespace std;
 using namespace mcl;
 using namespace bn;
+
+vector<uint8_t> toBytes(const Fr &x) {
+    string s = x.getStr(16); 
+    return vector<uint8_t>(s.begin(), s.end());
+}
+
+vector<uint8_t> toBytes(const G1 &g) {
+    string s;
+    s = g.getStr();
+    return vector<uint8_t>(s.begin(), s.end());
+}
+
+Fr hashToFr(const vector<vector<uint8_t>>& inputs) {
+    SHA256_CTX ctx;
+    SHA256_Init(&ctx);
+
+    for (const auto& input : inputs) {
+        SHA256_Update(&ctx, input.data(), input.size());
+    }
+
+    uint8_t hash[32];
+    SHA256_Final(hash, &ctx);
+
+    Fr result;
+    result.setArrayMask(hash, sizeof(hash));
+    return result;
+}
 
 bool isQuadraticResidue(Fr w) {
     Fr power = -1;
@@ -105,26 +135,6 @@ Plonk::Circuit Plonk::initialize(size_t n, vector<Fr> qm, vector<Fr> ql, vector<
     return ret;
 }
 
-void debugSetup(Plonk::Preprocess ret, Plonk::Circuit circuit) {
-    cout << "Checking qm, ql, qr, qo, qc values...\n";
-    for (size_t i = 1; i <= circuit.n; i++) {
-        cout << "At " << i << "\n";
-        cout << evaluatePoly(ret.qm, circuit.h[i]) << endl;
-        cout << evaluatePoly(ret.ql, circuit.h[i]) << endl;
-        cout << evaluatePoly(ret.qr, circuit.h[i]) << endl;
-        cout << evaluatePoly(ret.qo, circuit.h[i]) << endl;
-        cout << evaluatePoly(ret.qc, circuit.h[i]) << endl;
-
-        Fr o1 = evaluatePoly(ret.so1, circuit.h[i]);
-        Fr o2 = evaluatePoly(ret.so2, circuit.h[i]);
-        Fr o3 = evaluatePoly(ret.so3, circuit.h[i]);
-        if (o1 == circuit.permutation[i] && 
-            o2 == circuit.permutation[circuit.n + i] && 
-            o3 == circuit.permutation[circuit.n * 2 + i]) cout << "SO verified\n";
-        else cout << "SO failed\n";
-    }
-}
-
 Plonk::Preprocess Plonk::setup(Fr x, Plonk::Circuit circuit) {
     Plonk::Preprocess ret;
     ret.lagrange = lagrangeBasis(circuit.n, circuit.h[1]);
@@ -199,23 +209,6 @@ vector<Fr> abc(size_t n, Fr b1, Fr b2, Fr* w, vector<vector<Fr>> lagrange) {
     return ret;
 }
 
-void debugRoundOne(Plonk::Transcript ret, Plonk::Preprocess prep, vector<Fr> w) {
-    cout << "Checking values of abc...\n";
-    for (size_t i = 1; i <= prep.circuit.n; i++) {
-        Fr a = evaluatePoly(ret.a, prep.circuit.h[i]);
-        Fr b = evaluatePoly(ret.b, prep.circuit.h[i]);
-        Fr c = evaluatePoly(ret.c, prep.circuit.h[i]);
-
-        cout << "At " << i << "\n";
-        if (a == w[i]) cout << "a passed " << a << "\n";
-        else cout << "a failed\n";
-        if (b == w[prep.circuit.n + i]) cout << "b passed " << b << "\n";
-        else cout << "b failed\n";
-        if (c == w[prep.circuit.n * 2 + i]) cout << "c passed " << c << "\n";
-        else cout << "c failed\n";
-    } 
-}
-
 void roundOne(Plonk::Transcript &ret, Plonk::Preprocess preprocess, vector<Fr> w, vector<Fr> b) {
     // Alternatively, pass original vector using data() and add offset.
     size_t n = preprocess.circuit.n;
@@ -228,34 +221,6 @@ void roundOne(Plonk::Transcript &ret, Plonk::Preprocess preprocess, vector<Fr> w
     ret.cx = evaluatePolynomialG1(ret.c, preprocess.srs);
 
     // debugRoundOne(ret, preprocess, w);
-}
-
-void debugRoundTwo(Plonk::Transcript ret, Plonk::Preprocess prep, vector<Fr> w, vector<Fr> b, Plonk::Challenge challs) {
-    cout << "Checking values of z...\n";
-    Fr ratio = 1;
-    for (size_t i = 1; i <= prep.circuit.n; i++) {
-        cout << "At " << i << " ";
-        Fr zx;
-        Fr::pow(zx, prep.circuit.h[i], prep.circuit.n);
-        zx -= 1;
-
-        zx *= (b[7] * prep.circuit.h[2 * i] + b[8] * prep.circuit.h[i] + b[9]);
-
-        zx += ratio;
-
-        size_t n = prep.circuit.n;
-        ratio *= w[i] + challs.beta * prep.circuit.h[i] + challs.gamma;
-        ratio *= w[n + i] + challs.beta * prep.circuit.h[n + i] + challs.gamma;
-        ratio *= w[2 * n + i] + challs.beta * prep.circuit.h[2 * n + i] + challs.gamma;
-
-        ratio /= w[i] + challs.beta * prep.circuit.permutation[i] + challs.gamma;
-        ratio /= w[n + i] + challs.beta * prep.circuit.permutation[n + i] + challs.gamma;
-        ratio /= w[2 * n + i] + challs.beta * prep.circuit.permutation[2 * n + i] + challs.gamma;
-        
-
-        if (zx == evaluatePoly(ret.z, prep.circuit.h[i])) cout << "z passed\n";
-        else cout << "z failed\n";
-    }
 }
 
 void roundTwo(Plonk::Transcript &ret, Plonk::Preprocess preprocess, vector<Fr> w, vector<Fr> b, Plonk::Challenge challs) { 
@@ -350,55 +315,6 @@ void split(Plonk::Transcript &ret, size_t n, vector<Fr> b) {
     ret.mid[0] -= b[10];
     ret.mid[n] += b[11];
     ret.hi[0] -= b[11];
-}
-
-void debugSplit(Plonk::Transcript ret, Plonk::Preprocess prep) {
-    size_t n = prep.circuit.n;
-
-    cout << "Checking split...\n";
-
-    for (size_t i = 1; i <= n; i++) {
-        cout << "At " << i << " ";
-        Fr wn, w2n;
-        Fr::pow(wn, prep.circuit.h[i], n);
-        Fr::pow(w2n, prep.circuit.h[i], 2 * n);
-        if (evaluatePoly(ret.lo, prep.circuit.h[i]) + 
-            wn * evaluatePoly(ret.mid, prep.circuit.h[i]) + 
-            w2n * evaluatePoly(ret.hi, prep.circuit.h[i]) == evaluatePoly(ret.t, prep.circuit.h[i])) cout << "Split passed\n";
-        else cout << "Split failed\n";
-    }
-
-    cout << "Checking split polynomial...\n";
-    // cout << ret.t.size() << endl;
-    // cout << ret.lo.size() << endl;
-    // cout << ret.mid.size() << endl;
-    // cout << ret.hi.size() << endl;
-    bool match = true;
-    for (size_t i = 0; i < n; i++) {
-        if (ret.lo[i] != ret.t[i]) match = false;
-    }
-    if (ret.t[n] != ret.lo[n] + ret.mid[0]) match = false;
-    for (size_t i = n + 1; i < 2 * n; i++) {
-        if (ret.mid[i - n] != ret.t[i]) match = false;
-    }
-    if (ret.t[2 * n] != ret.mid[n] + ret.hi[0]) match = false;
-    for (size_t i = 2 * n + 1; i < ret.t.size(); i++) {
-        if (ret.hi[i - n - n] != ret.t[i]) match = false;
-    }
-
-    if (match) cout << "Polynomials verified.\n";
-    else cout << "Polynomials failed.\n";
-}
-
-void debugRoundThree(Plonk::Transcript ret, Plonk::Preprocess prep) {
-    size_t n = prep.circuit.n;
-
-    cout << "Checking t values...\n";
-
-    for (size_t i = 1; i <= n; i++) {
-        cout << "At " << i << " ";
-        cout << evaluatePoly(ret.t, prep.circuit.h[i]) << endl;
-    }
 }
 
 // Have yet to include public inputs
@@ -563,38 +479,6 @@ void roundFour(Plonk::Transcript &ret, Plonk::Preprocess preprocess, vector<Fr> 
     ret.zwv = evaluatePolynomial(ret.z, vs);
 }
 
-void debugRoundFive(Plonk::Transcript transcript, Plonk::Preprocess preprocess, Fr v, bool first) {
-    cout << "Checking r values...\n";
-    
-    if (first) {
-        Fr t = evaluatePoly(transcript.t, v);
-        Fr r = evaluatePoly(transcript.r, v);
-        Fr vn;
-        Fr::pow(vn, v, preprocess.circuit.n);
-        vn -= 1;
-
-        if (r == t * vn) cout << "First half of r verified.\n";
-        else cout << "First half of r failed.\n";
-        return;
-    }
-
-    for (size_t i = 1; i <= preprocess.circuit.n; i++) {
-        cout << evaluatePoly(transcript.r, preprocess.circuit.h[i]) << endl;
-    }
-    cout << "V: " << evaluatePoly(transcript.r, v) << endl;
-}
-
-void debugRoundFive(Plonk::Transcript transcript, Plonk::Preprocess preprocess, Fr v, size_t f) {
-    if (f == 1) {
-        if (evaluatePoly(transcript.w, v) == 0) cout << "w verified.\n";
-        else cout << "w failed.\n";
-        return;
-    }
-
-    if (evaluatePoly(transcript.ww, v * preprocess.circuit.h[1]) == 0) cout << "ww verified.\n";
-    else cout << "ww failed.\n";
-}
-
 void roundFive(Plonk::Transcript &ret, Plonk::Preprocess preprocess, Plonk::Challenge challs, vector<Fr> vs) {
     // Evaluating r(X)
     size_t n = preprocess.circuit.n;
@@ -682,8 +566,10 @@ void roundFive(Plonk::Transcript &ret, Plonk::Preprocess preprocess, Plonk::Chal
 Plonk::Witness Plonk::prove(Plonk::Preprocess preprocess, size_t l, vector<Fr> w) {
     Plonk::Transcript transcript;
     Plonk::Witness ret;
-    ret.challs.k1 = preprocess.circuit.k1;
-    ret.challs.k2 = preprocess.circuit.k2;
+    Plonk::Challenge challs;
+
+    // Transcript to be hashed to generate challenges.
+    vector<vector<uint8_t>> hashed;
 
     vector<Fr> b(22); b[0] = 0;
     for (size_t i = 1; i <= 11; i++) {
@@ -692,34 +578,50 @@ Plonk::Witness Plonk::prove(Plonk::Preprocess preprocess, size_t l, vector<Fr> w
     
     // ROUND 1
     roundOne(transcript, preprocess, w, b);
+    hashed.push_back(toBytes(transcript.ax));
+    hashed.push_back(toBytes(transcript.bx));
+    hashed.push_back(toBytes(transcript.cx));
+    hashed.push_back(toBytes(Fr(0)));
 
     // ROUND 2
-    ret.challs.beta.setByCSPRNG(); // Should be H(transcript, 0)
-    ret.challs.gamma.setByCSPRNG(); // Should be H(transcript, 1)
-    roundTwo(transcript, preprocess, w, b, ret.challs);
+    challs.beta = hashToFr(hashed);
+    hashed[hashed.size() - 1] = toBytes(Fr(1));
+    challs.gamma = hashToFr(hashed);
+    roundTwo(transcript, preprocess, w, b, challs);
+    hashed[hashed.size() - 1] = toBytes(transcript.zx);
 
     // ROUND 3
-    ret.challs.alpha.setByCSPRNG(); // Should be H(transcript)
-    roundThree(transcript, preprocess, l, w, b, ret.challs);
+    challs.alpha = hashToFr(hashed);
+    roundThree(transcript, preprocess, l, w, b, challs);
+    hashed.push_back(toBytes(transcript.lox));
+    hashed.push_back(toBytes(transcript.midx));
+    hashed.push_back(toBytes(transcript.hix));
 
     // ROUND 4
-    Fr v; 
-    v.setByCSPRNG(); // Should be H(transcript)
-    ret.challs.v = v;
+    challs.v = hashToFr(hashed);
 
     vector<Fr> vs(preprocess.circuit.n + 5, 1);
     Fr curr = 1;
     for (size_t i = 0; i < vs.size(); i++) {
         vs[i] = curr;
-        curr *= v;
+        curr *= challs.v;
     }
     roundFour(transcript, preprocess, vs);
 
-    // ROUND 5
-    ret.challs.u.setByCSPRNG(); // Should be H(transcript)
-    roundFive(transcript, preprocess, ret.challs, vs);
+    hashed.push_back(toBytes(transcript.av));
+    hashed.push_back(toBytes(transcript.bv));
+    hashed.push_back(toBytes(transcript.cv));
+    hashed.push_back(toBytes(transcript.so1v));
+    hashed.push_back(toBytes(transcript.so2v));
+    hashed.push_back(toBytes(transcript.zwv));
 
-    ret.challs.e.setByCSPRNG(); // Should be H(transcript)
+    // ROUND 5
+    challs.u = hashToFr(hashed);
+    roundFive(transcript, preprocess, challs, vs);
+    hashed.push_back(toBytes(transcript.wx));
+    hashed.push_back(toBytes(transcript.wwx));
+
+    challs.e = hashToFr(hashed);
 
     // Copy values from transcript to witness
     ret.ax = transcript.ax;
@@ -763,12 +665,46 @@ Plonk::Verifier Plonk::preprocess(Plonk::Preprocess preprocess) {
     return ret;
 }
 
+Plonk::Challenge evaluateChalls(Plonk::Witness witness) {
+    Plonk::Challenge challs;
+    vector<vector<uint8_t>> hashed;
+
+    hashed.push_back(toBytes(witness.ax));
+    hashed.push_back(toBytes(witness.bx));
+    hashed.push_back(toBytes(witness.cx));
+    hashed.push_back(toBytes(Fr(0)));
+
+    challs.beta = hashToFr(hashed);
+    hashed[hashed.size() - 1] = toBytes(Fr(1));
+    challs.gamma = hashToFr(hashed);
+    hashed[hashed.size() - 1] = toBytes(witness.zx);
+
+    challs.alpha = hashToFr(hashed);
+    hashed.push_back(toBytes(witness.lox));
+    hashed.push_back(toBytes(witness.midx));
+    hashed.push_back(toBytes(witness.hix));
+
+    challs.v = hashToFr(hashed);
+    hashed.push_back(toBytes(witness.av));
+    hashed.push_back(toBytes(witness.bv));
+    hashed.push_back(toBytes(witness.cv));
+    hashed.push_back(toBytes(witness.so1v));
+    hashed.push_back(toBytes(witness.so2v));
+    hashed.push_back(toBytes(witness.zwv));
+
+    challs.u = hashToFr(hashed);
+    hashed.push_back(toBytes(witness.wx));
+    hashed.push_back(toBytes(witness.wwx));
+
+    challs.e = hashToFr(hashed);
+
+    return challs;
+}
+
 // Verifier can only access up until index l of w
 bool Plonk::verify(size_t n, Plonk::Preprocess prep, Plonk::Witness witness, size_t l, vector<Fr> w) {
     Plonk::Verifier verifier = preprocess(prep);
     Fr omega = prep.circuit.h[1];
-
-    Plonk::Challenge challs = witness.challs;
 
     // Supposed to include KZG Validation
     if (!witness.ax.isValid() || !witness.bx.isValid() || !witness.cx.isValid() || 
@@ -782,7 +718,8 @@ bool Plonk::verify(size_t n, Plonk::Preprocess prep, Plonk::Witness witness, siz
 
     cout << "✓ Data check passed\n";
 
-    // Compute challenges (skipped as it is generated randomly)
+    // Compute challenge based on witness / transcript
+    Plonk::Challenge challs = evaluateChalls(witness);
 
     // Compute zero polynomial evaluation
     Fr zhv;
@@ -821,8 +758,8 @@ bool Plonk::verify(size_t n, Plonk::Preprocess prep, Plonk::Witness witness, siz
     D = qmx + qlx + qrx + qox + verifier.qcx;
 
     Fr temp = (witness.av + challs.beta * challs.v + challs.gamma) * 
-        (witness.bv + challs.beta * challs.k1 * challs.v + challs.gamma) *
-        (witness.cv + challs.beta * challs.k2 * challs.v + challs.gamma) * challs.alpha +
+        (witness.bv + challs.beta * prep.circuit.k1 * challs.v + challs.gamma) *
+        (witness.cv + challs.beta * prep.circuit.k2 * challs.v + challs.gamma) * challs.alpha +
         l1v * challs.alpha * challs.alpha + challs.e;
     
     G1 zx;

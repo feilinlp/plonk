@@ -57,7 +57,6 @@ public:
 
     struct Challenge {
         Fr beta, gamma, alpha, v, u, e;
-        Fr k1, k2;
     };
 
     struct Witness {
@@ -66,8 +65,6 @@ public:
         G1 lox, midx, hix;
         G1 wx, wwx;
         Fr av, bv, cv, so1v, so2v, zwv;
-
-        Challenge challs;
     };
 
     struct Verifier {

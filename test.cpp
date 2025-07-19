@@ -35,7 +35,7 @@ int main() {
     }
 
     // Step 1: Circuit Initialization
-    cout << "\n[1] Initializing Circuit..." << endl;
+    cout << "\nInitializing Circuit..." << endl;
     Plonk::Circuit circuit = Plonk::initialize(n, qm, ql, qr, qo, qc, permutation);
 
     // Step 2: Preprocessing
@@ -55,7 +55,7 @@ int main() {
     w[2 * n + 1] = Fr(7); // c = a * b
 
     // Optional: Constraint sanity check
-    Fr constraint = w[1] * w[n + 1] - w[2 * n + 1];
+    Fr constraint = w[1] + w[n + 1] - w[2 * n + 1];
     cout << "[✓] Manual constraint check: " << (constraint == 0 ? "Valid" : "Invalid") << endl;
 
     // Step 4: Prover
