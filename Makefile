@@ -14,6 +14,7 @@ LIBS = -lmcl -lgmp -lgmpxx -lcrypto
 PLONK_SRC = ./src/plonk.cpp
 NTT_SRC = ./src/ntt.cpp
 KZG_SRC = ./src/kzg.cpp
+HELPER_SRC = ./src/helper.cpp
 
 # Test files
 TEST_SRC = ./test.cpp
@@ -27,7 +28,7 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 # Build the test executable
-$(TEST_TARGET): $(TEST_SRC) $(PLONK_SRC) $(NTT_SRC) $(KZG_SRC) | $(BUILD_DIR)
+$(TEST_TARGET): $(TEST_SRC) $(PLONK_SRC) $(NTT_SRC) $(KZG_SRC) $(HELPER_SRC) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -I./plonk -o $@ $^ $(LDFLAGS) $(LIBS)
 
 # Run the test
