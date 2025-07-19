@@ -332,15 +332,15 @@ void roundThree(Plonk::Transcript &ret, Plonk::Preprocess preprocess, size_t l, 
 
     temp = addPolynomials(temp, preprocess.qc);
 
-    // vector<Fr> pi(n + 1, 0);
+    vector<Fr> pi(n + 1, 0);
 
-    // for (size_t i = 1; i <= l; i++) {
-    //     for (size_t j = 0; j < preprocess.lagrange[i].size(); j++) {
-    //         pi[j] -= preprocess.lagrange[i][j] * w[i];
-    //     }
-    // }
+    for (size_t i = 1; i <= l; i++) {
+        for (size_t j = 0; j < preprocess.lagrange[i].size(); j++) {
+            pi[j] -= preprocess.lagrange[i][j] * w[i];
+        }
+    }
 
-    // ret.pi = pi;
+    ret.pi = pi;
 
     ret.t = addPolynomials(ret.t, temp);
 
@@ -426,16 +426,6 @@ void roundThree(Plonk::Transcript &ret, Plonk::Preprocess preprocess, size_t l, 
     temp.clear();
     temp = polynomial_multiply(temp_t, zh);
 
-    // bool correct = true;
-    // for (size_t i = 0; i < temp.size(); i++) {
-    //     if (temp[i] != ret.t[i]) {
-    //         correct = false;
-    //         break;
-    //     }
-    // }
-    // if (correct) cout << "Correct polynomial division!\n";
-    // else cout << "Wrong polynomial division!\n";
-
     ret.t.clear();
     ret.t.assign(temp_t.begin(), temp_t.end());
 
@@ -468,8 +458,8 @@ void roundFive(Plonk::Transcript &ret, Plonk::Preprocess preprocess, Plonk::Chal
     for (size_t i = 0; i < preprocess.qo.size(); i++) { ret.r[i] += ret.cv.qi * preprocess.qo[i]; }
     for (size_t i = 0; i < preprocess.qc.size(); i++) { ret.r[i] += preprocess.qc[i]; }
 
-    // Fr piv = evaluatePolynomial(ret.pi, vs);
-    // ret.r[0] += piv;
+    Fr piv = evaluatePolynomial(ret.pi, vs);
+    ret.r[0] += piv;
 
     for (size_t i = 0; i < ret.z.size(); i++) { 
         ret.r[i] += ret.z[i] * challs.alpha * (ret.av.qi + challs.beta * vs[1] + challs.gamma) * 
@@ -700,14 +690,14 @@ bool Plonk::verify(size_t n, Plonk::Preprocess prep, Plonk::Witness witness, siz
     l1v /= (challs.v - omega);
 
     // Compute public input polynomial evaluation
-    // vector<Fr> pi(n + 1, 0);
+    vector<Fr> pi(n + 1, 0);
 
-    // for (size_t i = 1; i <= l; i++) {
-    //     for (size_t j = 0; j < prep.lagrange[i].size(); j++) {
-    //         pi[j] -= prep.lagrange[i][j] * w[i];
-    //     }
-    // }
-    // Fr piv = evaluatePoly(pi, challs.v);
+    for (size_t i = 1; i <= l; i++) {
+        for (size_t j = 0; j < prep.lagrange[i].size(); j++) {
+            pi[j] -= prep.lagrange[i][j] * w[i];
+        }
+    }
+    Fr piv = evaluatePoly(pi, challs.v);
 
     // Constant term of r 
     Fr r0 = - l1v * challs.alpha * challs.alpha - 
@@ -715,7 +705,7 @@ bool Plonk::verify(size_t n, Plonk::Preprocess prep, Plonk::Witness witness, siz
         (witness.bv.qi + challs.beta * witness.so2v.qi + challs.gamma) *
         (witness.cv.qi + challs.gamma) * witness.zwv.qi;
 
-    // r0 += piv;
+    r0 += piv;
     
     // Batched polynomial commitment D = r - r0 + uz
     G1 D;
@@ -754,9 +744,6 @@ bool Plonk::verify(size_t n, Plonk::Preprocess prep, Plonk::Witness witness, siz
     G1 _ = witness.lox.c + midx + hix;
     G1::mul(_, _, zhv);
     D -= _;
-
-    G1 minus; G1::mul(minus, witness.zx.c, challs.e);
-    G1 add; G1::mul(add, prep.pk.g1[0], r0);
 
     vector<Fr> us(6, 1);
     Fr curr = challs.u;
