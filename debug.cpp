@@ -1,3 +1,6 @@
+// This debug is used before KZG is implemented.
+// Some implementations will not work as expected.
+
 #include "plonk.hpp"
 #include "ntt.hpp"
 #include "kzg.hpp"

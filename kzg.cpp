@@ -6,27 +6,30 @@ using namespace std;
 using namespace mcl;
 using namespace bn;
 
-KZG::PublicKey setup(size_t t) {
+KZG::PublicKey KZGSetup(size_t t, Fr x) {
     KZG::PublicKey pk;
     pk.t = t;
-    pk.g1.resize(t+1);
-    pk.g2.resize(t+1);
 
-    Fr a;
-    a.setByCSPRNG();
-    
-    // Get generators for G1 and G2
-    G1 g1;
-    hashAndMapToG1(g1, "G1_Generator", strlen("G1_Generator"));
-    G2 g2;
-    hashAndMapToG2(g2, "G2_Generator", strlen("G2_Generator"));
+    G1 one;
+    mapToG1(one, 1);
+    G1::mul(one, one, 1);
 
-    Fr power = 1;
-    for (size_t i = 0; i <= t; i++) {
-        G1::mul(pk.g1[i], g1, power);
-        G2::mul(pk.g2[i], g2, power);
-        Fr::mul(power, power, a);
+    Fr curr = 1;
+    for (size_t i = 0; i <= t + 5; i++) { 
+        G1 ins;
+        G1::mul(ins, one, curr);  
+        
+        pk.g1.push_back(ins);
+        
+        Fr::mul(curr, curr, x);
     }
+
+    G2 two;
+    mapToG2(two, 1);
+
+    pk.g2.push_back(two);
+    G2::mul(two, two, x);
+    pk.g2.push_back(two);
 
     return pk;
 }

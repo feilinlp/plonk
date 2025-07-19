@@ -76,14 +76,6 @@ vector<vector<Fr>> lagrangeBasis(size_t n, Fr omega) {
     return lagrange;
 }
 
-G1 evaluatePolynomialG1(vector<Fr> p, vector<G1> x) {
-    G1 ret;
-
-    G1::mulVec(ret, x.data(), p.data(), p.size());
-
-    return ret;
-}
-
 Fr evaluatePolynomial(vector<Fr> p, vector<Fr> x) {
     Fr ret = 0;
     for (size_t i = 0; i < p.size(); i++) { ret += p[i] * x[i]; }
@@ -150,26 +142,7 @@ Plonk::Preprocess Plonk::setup(Fr x, Plonk::Circuit circuit) {
     ret.so3.resize(circuit.n, 0);
 
     // Create the SRS
-    G1 one;
-    mapToG1(one, 1);
-    G1::mul(one, one, 1);
-
-    Fr curr = 1;
-    for (size_t i = 0; i <= circuit.n + 5; i++) { 
-        G1 ins;
-        G1::mul(ins, one, curr);  
-        
-        ret.srs.push_back(ins);
-        
-        Fr::mul(curr, curr, x);
-    }
-
-    G2 two;
-    mapToG2(two, 1);
-
-    ret.srs2.push_back(two);
-    G2::mul(two, two, x);
-    ret.srs2.push_back(two);
+    ret.pk = KZGSetup(circuit.n, x);
     
     for (size_t i = 1; i <= circuit.n; i++) {
         for (size_t j = 0; j < ret.lagrange[i].size(); j++) {
@@ -184,8 +157,6 @@ Plonk::Preprocess Plonk::setup(Fr x, Plonk::Circuit circuit) {
             ret.so3[j] += circuit.permutation[2 * circuit.n + i] * ret.lagrange[i][j];
         }
     }
-
-    // debugSetup(ret, circuit);
 
     return ret;
 }
@@ -216,11 +187,9 @@ void roundOne(Plonk::Transcript &ret, Plonk::Preprocess preprocess, vector<Fr> w
     ret.b = abc(n, b[3], b[4], &w[n], preprocess.lagrange);
     ret.c = abc(n, b[5], b[6], &w[2 * n], preprocess.lagrange);
 
-    ret.ax = evaluatePolynomialG1(ret.a, preprocess.srs);
-    ret.bx = evaluatePolynomialG1(ret.b, preprocess.srs);
-    ret.cx = evaluatePolynomialG1(ret.c, preprocess.srs);
-
-    // debugRoundOne(ret, preprocess, w);
+    ret.ax = commit(preprocess.pk, ret.a);
+    ret.bx = commit(preprocess.pk, ret.b);
+    ret.cx = commit(preprocess.pk, ret.c);
 }
 
 void roundTwo(Plonk::Transcript &ret, Plonk::Preprocess preprocess, vector<Fr> w, vector<Fr> b, Plonk::Challenge challs) { 
@@ -263,9 +232,7 @@ void roundTwo(Plonk::Transcript &ret, Plonk::Preprocess preprocess, vector<Fr> w
         }
     }
 
-    ret.zx = evaluatePolynomialG1(ret.z, preprocess.srs);
-
-    // debugRoundTwo(ret, preprocess, w, b, challs);
+    ret.zx = commit(preprocess.pk, ret.z);
 }
 
 vector<Fr> polynomialDivision(vector<Fr> a, size_t n) {
@@ -353,8 +320,6 @@ void roundThree(Plonk::Transcript &ret, Plonk::Preprocess preprocess, size_t l, 
 
     // ret.pi = pi;
 
-    // temp = addPolynomials(temp, pi);
-
     ret.t = addPolynomials(ret.t, temp);
 
     // Checks for Round 2 polynomials
@@ -431,8 +396,6 @@ void roundThree(Plonk::Transcript &ret, Plonk::Preprocess preprocess, size_t l, 
 
     ret.t = addPolynomials(ret.t, temp);
     
-    // debugRoundThree(ret, preprocess);
-    
     vector<Fr> temp_t;
     temp_t = polynomialDivision(ret.t, n); // Divide by ZH
 
@@ -440,43 +403,36 @@ void roundThree(Plonk::Transcript &ret, Plonk::Preprocess preprocess, size_t l, 
 
     temp.clear();
     temp = polynomial_multiply(temp_t, zh);
-    bool correct = true;
-    for (size_t i = 0; i < temp.size(); i++) {
-        if (temp[i] != ret.t[i]) {
-            correct = false;
-            break;
-        }
-    }
-    if (correct) cout << "Correct polynomial division!\n";
-    else cout << "Wrong polynomial division!\n";
+
+    // bool correct = true;
+    // for (size_t i = 0; i < temp.size(); i++) {
+    //     if (temp[i] != ret.t[i]) {
+    //         correct = false;
+    //         break;
+    //     }
+    // }
+    // if (correct) cout << "Correct polynomial division!\n";
+    // else cout << "Wrong polynomial division!\n";
 
     ret.t.clear();
     ret.t.assign(temp_t.begin(), temp_t.end());
 
     split(ret, n, b);
 
-    ret.lox = evaluatePolynomialG1(ret.lo, preprocess.srs);
-    ret.midx = evaluatePolynomialG1(ret.mid, preprocess.srs);
-    ret.hix = evaluatePolynomialG1(ret.hi, preprocess.srs);
-
-    // debugSplit(ret, preprocess);
+    ret.lox = commit(preprocess.pk, ret.lo);
+    ret.midx = commit(preprocess.pk, ret.mid);
+    ret.hix = commit(preprocess.pk, ret.hi);
 }
 
 void roundFour(Plonk::Transcript &ret, Plonk::Preprocess preprocess, vector<Fr> vs) {
-    ret.av = evaluatePoly(ret.a, vs[1]);
-    ret.bv = evaluatePoly(ret.b, vs[1]);
-    ret.cv = evaluatePoly(ret.c, vs[1]);
+    ret.av = createWitness(preprocess.pk, ret.a, vs[1]);
+    ret.bv = createWitness(preprocess.pk, ret.b, vs[1]);
+    ret.cv = createWitness(preprocess.pk, ret.c, vs[1]);
 
-    ret.so1v = evaluatePoly(preprocess.so1, vs[1]);
-    ret.so2v = evaluatePoly(preprocess.so2, vs[1]);
+    ret.so1v = createWitness(preprocess.pk, preprocess.so1, vs[1]);
+    ret.so2v = createWitness(preprocess.pk, preprocess.so2, vs[1]);
 
-    Fr curr = 1;
-    for (size_t i = 0; i < vs.size(); i++) {
-        vs[i] *= curr;
-        curr *= preprocess.circuit.h[1];
-    }
-
-    ret.zwv = evaluatePolynomial(ret.z, vs);
+    ret.zwv = createWitness(preprocess.pk, ret.z, vs[1] * preprocess.circuit.h[1]);
 }
 
 void roundFive(Plonk::Transcript &ret, Plonk::Preprocess preprocess, Plonk::Challenge challs, vector<Fr> vs) {
@@ -484,43 +440,39 @@ void roundFive(Plonk::Transcript &ret, Plonk::Preprocess preprocess, Plonk::Chal
     size_t n = preprocess.circuit.n;
     ret.r.resize(3 * n + 5, 0); 
 
-    for (size_t i = 0; i < preprocess.qm.size(); i++) { ret.r[i] += ret.av * ret.bv * preprocess.qm[i]; }
-    for (size_t i = 0; i < preprocess.ql.size(); i++) { ret.r[i] += ret.av * preprocess.ql[i]; }
-    for (size_t i = 0; i < preprocess.qr.size(); i++) { ret.r[i] += ret.bv * preprocess.qr[i]; }
-    for (size_t i = 0; i < preprocess.qo.size(); i++) { ret.r[i] += ret.cv * preprocess.qo[i]; }
+    for (size_t i = 0; i < preprocess.qm.size(); i++) { ret.r[i] += ret.av.qi * ret.bv.qi * preprocess.qm[i]; }
+    for (size_t i = 0; i < preprocess.ql.size(); i++) { ret.r[i] += ret.av.qi * preprocess.ql[i]; }
+    for (size_t i = 0; i < preprocess.qr.size(); i++) { ret.r[i] += ret.bv.qi * preprocess.qr[i]; }
+    for (size_t i = 0; i < preprocess.qo.size(); i++) { ret.r[i] += ret.cv.qi * preprocess.qo[i]; }
     for (size_t i = 0; i < preprocess.qc.size(); i++) { ret.r[i] += preprocess.qc[i]; }
 
     // Fr piv = evaluatePolynomial(ret.pi, vs);
     // ret.r[0] += piv;
 
     for (size_t i = 0; i < ret.z.size(); i++) { 
-        ret.r[i] += ret.z[i] * challs.alpha * (ret.av + challs.beta * vs[1] + challs.gamma) * 
-            (ret.bv + challs.beta * vs[1] * preprocess.circuit.k1 + challs.gamma) * 
-            (ret.cv + challs.beta * vs[1] * preprocess.circuit.k2 + challs.gamma); 
+        ret.r[i] += ret.z[i] * challs.alpha * (ret.av.qi + challs.beta * vs[1] + challs.gamma) * 
+            (ret.bv.qi + challs.beta * vs[1] * preprocess.circuit.k1 + challs.gamma) * 
+            (ret.cv.qi + challs.beta * vs[1] * preprocess.circuit.k2 + challs.gamma); 
     }
 
     vector<Fr> so3;
     so3.assign(preprocess.so3.begin(), preprocess.so3.end());
     for (size_t i = 0; i < so3.size(); i++) { so3[i] *= challs.beta; }
-    so3[0] += ret.cv + challs.gamma; 
+    so3[0] += ret.cv.qi + challs.gamma; 
 
     for (size_t i = 0; i < so3.size(); i++) {
-        ret.r[i] -= so3[i] * challs.alpha * ret.zwv * (ret.av + challs.beta * ret.so1v + challs.gamma) * 
-            (ret.bv + challs.beta * ret.so2v + challs.gamma);
+        ret.r[i] -= so3[i] * challs.alpha * ret.zwv.qi * (ret.av.qi + challs.beta * ret.so1v.qi + challs.gamma) * 
+            (ret.bv.qi + challs.beta * ret.so2v.qi + challs.gamma);
     }
 
     Fr l1v = evaluatePoly(preprocess.lagrange[1], vs[1]);
     for (size_t i = 0; i < ret.z.size(); i++) { ret.r[i] += challs.alpha * challs.alpha * ret.z[i] * l1v; }
     ret.r[0] -= challs.alpha * challs.alpha * l1v;
 
-    // debugRoundFive(ret, preprocess, vs[1], true);
-
     Fr zhv = vs[n] - 1;
     for (size_t i = 0; i < ret.lo.size(); i++) { ret.r[i] -= ret.lo[i] * zhv; }
     for (size_t i = 0; i < ret.mid.size(); i++) { ret.r[i] -= ret.mid[i] * zhv * vs[n]; }
     for (size_t i = 0; i < ret.hi.size(); i++) { ret.r[i] -= ret.hi[i] * zhv * vs[n] * vs[n]; }
-
-    // debugRoundFive(ret, preprocess, vs[1], false);
 
     // Evaluating W(X)
     vector<Fr> us(n + 5, 1);
@@ -538,9 +490,7 @@ void roundFive(Plonk::Transcript &ret, Plonk::Preprocess preprocess, Plonk::Chal
     for (size_t i = 0; i < preprocess.so1.size(); i++) { ret.w[i] += preprocess.so1[i] * us[4]; }
     for (size_t i = 0; i < preprocess.so2.size(); i++) { ret.w[i] += preprocess.so2[i] * us[5]; }
 
-    ret.w[0] -= ret.av * us[1] + ret.bv * us[2] + ret.cv * us[3] + ret.so1v * us[4] + ret.so2v * us[5];
-
-    // debugRoundFive(ret, preprocess, vs[1], 1);
+    ret.w[0] -= ret.av.qi * us[1] + ret.bv.qi * us[2] + ret.cv.qi * us[3] + ret.so1v.qi * us[4] + ret.so2v.qi * us[5];
 
     ret.w = divideByLinear(ret.w, vs[1]);
 
@@ -548,21 +498,18 @@ void roundFive(Plonk::Transcript &ret, Plonk::Preprocess preprocess, Plonk::Chal
         ret.w.pop_back();
     }
 
-    ret.wx = evaluatePolynomialG1(ret.w, preprocess.srs);
+    ret.wx = commit(preprocess.pk, ret.w);
 
     // Evaluating Ww(X)
     ret.ww.clear();
     ret.ww.assign(ret.z.begin(), ret.z.end());
-    ret.ww[0] -= ret.zwv;
-
-    // debugRoundFive(ret, preprocess, vs[1], 2);
+    ret.ww[0] -= ret.zwv.qi;
 
     ret.ww = divideByLinear(ret.ww, vs[1] * preprocess.circuit.h[1]);
-    ret.wwx = evaluatePolynomialG1(ret.ww, preprocess.srs);
+    ret.wwx = commit(preprocess.pk, ret.ww);
 }
 
 // Can be optimized by not converting back-and-forth polynomials from lagrange basis to monomial basis
-// Missing KZG commitments
 Plonk::Witness Plonk::prove(Plonk::Preprocess preprocess, size_t l, vector<Fr> w) {
     Plonk::Transcript transcript;
     Plonk::Witness ret;
@@ -578,9 +525,9 @@ Plonk::Witness Plonk::prove(Plonk::Preprocess preprocess, size_t l, vector<Fr> w
     
     // ROUND 1
     roundOne(transcript, preprocess, w, b);
-    hashed.push_back(toBytes(transcript.ax));
-    hashed.push_back(toBytes(transcript.bx));
-    hashed.push_back(toBytes(transcript.cx));
+    hashed.push_back(toBytes(transcript.ax.c));
+    hashed.push_back(toBytes(transcript.bx.c));
+    hashed.push_back(toBytes(transcript.cx.c));
     hashed.push_back(toBytes(Fr(0)));
 
     // ROUND 2
@@ -588,14 +535,14 @@ Plonk::Witness Plonk::prove(Plonk::Preprocess preprocess, size_t l, vector<Fr> w
     hashed[hashed.size() - 1] = toBytes(Fr(1));
     challs.gamma = hashToFr(hashed);
     roundTwo(transcript, preprocess, w, b, challs);
-    hashed[hashed.size() - 1] = toBytes(transcript.zx);
+    hashed[hashed.size() - 1] = toBytes(transcript.zx.c);
 
     // ROUND 3
     challs.alpha = hashToFr(hashed);
     roundThree(transcript, preprocess, l, w, b, challs);
-    hashed.push_back(toBytes(transcript.lox));
-    hashed.push_back(toBytes(transcript.midx));
-    hashed.push_back(toBytes(transcript.hix));
+    hashed.push_back(toBytes(transcript.lox.c));
+    hashed.push_back(toBytes(transcript.midx.c));
+    hashed.push_back(toBytes(transcript.hix.c));
 
     // ROUND 4
     challs.v = hashToFr(hashed);
@@ -608,18 +555,18 @@ Plonk::Witness Plonk::prove(Plonk::Preprocess preprocess, size_t l, vector<Fr> w
     }
     roundFour(transcript, preprocess, vs);
 
-    hashed.push_back(toBytes(transcript.av));
-    hashed.push_back(toBytes(transcript.bv));
-    hashed.push_back(toBytes(transcript.cv));
-    hashed.push_back(toBytes(transcript.so1v));
-    hashed.push_back(toBytes(transcript.so2v));
-    hashed.push_back(toBytes(transcript.zwv));
+    hashed.push_back(toBytes(transcript.av.qi));
+    hashed.push_back(toBytes(transcript.bv.qi));
+    hashed.push_back(toBytes(transcript.cv.qi));
+    hashed.push_back(toBytes(transcript.so1v.qi));
+    hashed.push_back(toBytes(transcript.so2v.qi));
+    hashed.push_back(toBytes(transcript.zwv.qi));
 
     // ROUND 5
     challs.u = hashToFr(hashed);
     roundFive(transcript, preprocess, challs, vs);
-    hashed.push_back(toBytes(transcript.wx));
-    hashed.push_back(toBytes(transcript.wwx));
+    hashed.push_back(toBytes(transcript.wx.c));
+    hashed.push_back(toBytes(transcript.wwx.c));
 
     challs.e = hashToFr(hashed);
 
@@ -650,17 +597,15 @@ Plonk::Witness Plonk::prove(Plonk::Preprocess preprocess, size_t l, vector<Fr> w
 Plonk::Verifier Plonk::preprocess(Plonk::Preprocess preprocess) {
     Plonk::Verifier ret;
 
-    ret.qmx = evaluatePolynomialG1(preprocess.qm, preprocess.srs);
-    ret.qlx = evaluatePolynomialG1(preprocess.ql, preprocess.srs);
-    ret.qrx = evaluatePolynomialG1(preprocess.qr, preprocess.srs);
-    ret.qox = evaluatePolynomialG1(preprocess.qo, preprocess.srs);
-    ret.qcx = evaluatePolynomialG1(preprocess.qc, preprocess.srs);
+    ret.qmx = commit(preprocess.pk, preprocess.qm);
+    ret.qlx = commit(preprocess.pk, preprocess.ql);
+    ret.qrx = commit(preprocess.pk, preprocess.qr);
+    ret.qox = commit(preprocess.pk, preprocess.qo);
+    ret.qcx = commit(preprocess.pk, preprocess.qc);
 
-    ret.so1x = evaluatePolynomialG1(preprocess.so1, preprocess.srs);
-    ret.so2x = evaluatePolynomialG1(preprocess.so2, preprocess.srs);
-    ret.so3x = evaluatePolynomialG1(preprocess.so3, preprocess.srs);
-    
-    ret.x = preprocess.srs[1];
+    ret.so1x = commit(preprocess.pk, preprocess.so1);
+    ret.so2x = commit(preprocess.pk, preprocess.so2);
+    ret.so3x = commit(preprocess.pk, preprocess.so3);
 
     return ret;
 }
@@ -669,32 +614,32 @@ Plonk::Challenge evaluateChalls(Plonk::Witness witness) {
     Plonk::Challenge challs;
     vector<vector<uint8_t>> hashed;
 
-    hashed.push_back(toBytes(witness.ax));
-    hashed.push_back(toBytes(witness.bx));
-    hashed.push_back(toBytes(witness.cx));
+    hashed.push_back(toBytes(witness.ax.c));
+    hashed.push_back(toBytes(witness.bx.c));
+    hashed.push_back(toBytes(witness.cx.c));
     hashed.push_back(toBytes(Fr(0)));
 
     challs.beta = hashToFr(hashed);
     hashed[hashed.size() - 1] = toBytes(Fr(1));
     challs.gamma = hashToFr(hashed);
-    hashed[hashed.size() - 1] = toBytes(witness.zx);
+    hashed[hashed.size() - 1] = toBytes(witness.zx.c);
 
     challs.alpha = hashToFr(hashed);
-    hashed.push_back(toBytes(witness.lox));
-    hashed.push_back(toBytes(witness.midx));
-    hashed.push_back(toBytes(witness.hix));
+    hashed.push_back(toBytes(witness.lox.c));
+    hashed.push_back(toBytes(witness.midx.c));
+    hashed.push_back(toBytes(witness.hix.c));
 
     challs.v = hashToFr(hashed);
-    hashed.push_back(toBytes(witness.av));
-    hashed.push_back(toBytes(witness.bv));
-    hashed.push_back(toBytes(witness.cv));
-    hashed.push_back(toBytes(witness.so1v));
-    hashed.push_back(toBytes(witness.so2v));
-    hashed.push_back(toBytes(witness.zwv));
+    hashed.push_back(toBytes(witness.av.qi));
+    hashed.push_back(toBytes(witness.bv.qi));
+    hashed.push_back(toBytes(witness.cv.qi));
+    hashed.push_back(toBytes(witness.so1v.qi));
+    hashed.push_back(toBytes(witness.so2v.qi));
+    hashed.push_back(toBytes(witness.zwv.qi));
 
     challs.u = hashToFr(hashed);
-    hashed.push_back(toBytes(witness.wx));
-    hashed.push_back(toBytes(witness.wwx));
+    hashed.push_back(toBytes(witness.wx.c));
+    hashed.push_back(toBytes(witness.wwx.c));
 
     challs.e = hashToFr(hashed);
 
@@ -706,20 +651,23 @@ bool Plonk::verify(size_t n, Plonk::Preprocess prep, Plonk::Witness witness, siz
     Plonk::Verifier verifier = preprocess(prep);
     Fr omega = prep.circuit.h[1];
 
-    // Supposed to include KZG Validation
-    if (!witness.ax.isValid() || !witness.bx.isValid() || !witness.cx.isValid() || 
-    !witness.zx.isValid() || !witness.lox.isValid() || !witness.midx.isValid() ||
-    !witness.hix.isValid() || !witness.wx.isValid() || !witness.wwx.isValid()) return false;
+    // Compute challenge based on witness / transcript
+    Plonk::Challenge challs = evaluateChalls(witness);
 
-    if (!witness.av.isValid() || !witness.bv.isValid() || !witness.cv.isValid() ||
-    !witness.so1v.isValid() || !witness.so2v.isValid() || !witness.zwv.isValid()) return false;
+    if (!witness.ax.c.isValid() || !witness.bx.c.isValid() || !witness.cx.c.isValid() || 
+    !witness.zx.c.isValid() || !witness.lox.c.isValid() || !witness.midx.c.isValid() ||
+    !witness.hix.c.isValid() || !witness.wx.c.isValid() || !witness.wwx.c.isValid()) return false;
+
+    if (!verifyEval(prep.pk, witness.ax, challs.v, witness.av) || 
+    !verifyEval(prep.pk, witness.bx, challs.v, witness.bv) || 
+    !verifyEval(prep.pk, witness.cx, challs.v, witness.cv) ||
+    !verifyEval(prep.pk, verifier.so1x, challs.v, witness.so1v) || 
+    !verifyEval(prep.pk, verifier.so2x, challs.v, witness.so2v) || 
+    !verifyEval(prep.pk, witness.zx, challs.v * prep.circuit.h[1], witness.zwv)) return false;
 
     for (size_t i = 1; i <= l; i++) if (!w[i].isValid()) return false;
 
     cout << "✓ Data check passed\n";
-
-    // Compute challenge based on witness / transcript
-    Plonk::Challenge challs = evaluateChalls(witness);
 
     // Compute zero polynomial evaluation
     Fr zhv;
@@ -742,35 +690,36 @@ bool Plonk::verify(size_t n, Plonk::Preprocess prep, Plonk::Witness witness, siz
 
     // Constant term of r 
     Fr r0 = - l1v * challs.alpha * challs.alpha - 
-        challs.alpha * (witness.av + challs.beta * witness.so1v + challs.gamma) *
-        (witness.bv + challs.beta * witness.so2v + challs.gamma) *
-        (witness.cv + challs.gamma) * witness.zwv;
+        challs.alpha * (witness.av.qi + challs.beta * witness.so1v.qi + challs.gamma) *
+        (witness.bv.qi + challs.beta * witness.so2v.qi + challs.gamma) *
+        (witness.cv.qi + challs.gamma) * witness.zwv.qi;
 
     // r0 += piv;
     
     // Batched polynomial commitment D = r - r0 + uz
     G1 D;
     G1 qmx, qlx, qrx, qox;
-    G1::mul(qmx, verifier.qmx, witness.av * witness.bv);
-    G1::mul(qlx, verifier.qlx, witness.av);
-    G1::mul(qrx, verifier.qrx, witness.bv);
-    G1::mul(qox, verifier.qox, witness.cv);
-    D = qmx + qlx + qrx + qox + verifier.qcx;
+    G1::mul(qmx, verifier.qmx.c, witness.av.qi * witness.bv.qi);
+    G1::mul(qlx, verifier.qlx.c, witness.av.qi);
+    G1::mul(qrx, verifier.qrx.c, witness.bv.qi);
+    G1::mul(qox, verifier.qox.c, witness.cv.qi);
+    D = qmx + qlx + qrx + qox + verifier.qcx.c;
 
-    Fr temp = (witness.av + challs.beta * challs.v + challs.gamma) * 
-        (witness.bv + challs.beta * prep.circuit.k1 * challs.v + challs.gamma) *
-        (witness.cv + challs.beta * prep.circuit.k2 * challs.v + challs.gamma) * challs.alpha +
+    Fr temp = (witness.av.qi + challs.beta * challs.v + challs.gamma) * 
+        (witness.bv.qi + challs.beta * prep.circuit.k1 * challs.v + challs.gamma) *
+        (witness.cv.qi + challs.beta * prep.circuit.k2 * challs.v + challs.gamma) * challs.alpha +
         l1v * challs.alpha * challs.alpha + challs.e;
     
     G1 zx;
-    G1::mul(zx, witness.zx, temp);
+    G1::mul(zx, witness.zx.c, temp);
     D += zx;
 
-    temp = (witness.av + challs.beta * witness.so1v + challs.gamma) * 
-        (witness.bv + challs.beta * witness.so2v + challs.gamma) *
-        challs.alpha * challs.beta * witness.zwv;
+    temp = (witness.av.qi + challs.beta * witness.so1v.qi + challs.gamma) * 
+        (witness.bv.qi + challs.beta * witness.so2v.qi + challs.gamma) *
+        challs.alpha * challs.beta * witness.zwv.qi;
+
     G1 so3x;
-    G1::mul(so3x, verifier.so3x, temp);
+    G1::mul(so3x, verifier.so3x.c, temp);
     D -= so3x;
 
     Fr vn, v2n;
@@ -778,15 +727,15 @@ bool Plonk::verify(size_t n, Plonk::Preprocess prep, Plonk::Witness witness, siz
     Fr::pow(v2n, challs.v, 2 * n);
 
     G1 midx, hix;
-    G1::mul(midx, witness.midx, vn);
-    G1::mul(hix, witness.hix, v2n);
+    G1::mul(midx, witness.midx.c, vn);
+    G1::mul(hix, witness.hix.c, v2n);
 
-    G1 _ = witness.lox + midx + hix;
+    G1 _ = witness.lox.c + midx + hix;
     G1::mul(_, _, zhv);
     D -= _;
 
-    G1 minus; G1::mul(minus, witness.zx, challs.e);
-    G1 add; G1::mul(add, prep.srs[0], r0);
+    G1 minus; G1::mul(minus, witness.zx.c, challs.e);
+    G1 add; G1::mul(add, prep.pk.g1[0], r0);
 
     vector<Fr> us(6, 1);
     Fr curr = challs.u;
@@ -796,27 +745,27 @@ bool Plonk::verify(size_t n, Plonk::Preprocess prep, Plonk::Witness witness, siz
     }
 
     G1 ax, bx, cx, so1x, so2x;
-    G1::mul(ax, witness.ax, us[1]);
-    G1::mul(bx, witness.bx, us[2]);
-    G1::mul(cx, witness.cx, us[3]);
-    G1::mul(so1x, verifier.so1x, us[4]);
-    G1::mul(so2x, verifier.so2x, us[5]);
+    G1::mul(ax, witness.ax.c, us[1]);
+    G1::mul(bx, witness.bx.c, us[2]);
+    G1::mul(cx, witness.cx.c, us[3]);
+    G1::mul(so1x, verifier.so1x.c, us[4]);
+    G1::mul(so2x, verifier.so2x.c, us[5]);
     G1 F = D + ax + bx + cx + so1x + so2x;
 
     G1 E;
-    temp = us[1] * witness.av + us[2] * witness.bv + us[3] * witness.cv +
-        us[4] * witness.so1v + us[5] * witness.so2v - r0 + challs.e * witness.zwv;
-    G1::mul(E, prep.srs[0], temp);
+    temp = us[1] * witness.av.qi + us[2] * witness.bv.qi + us[3] * witness.cv.qi +
+        us[4] * witness.so1v.qi + us[5] * witness.so2v.qi - r0 + challs.e * witness.zwv.qi;
+    G1::mul(E, prep.pk.g1[0], temp);
 
     GT left, right;
     G1 wwx;
-    G1::mul(wwx, witness.wwx, challs.e);
-    pairing(left, witness.wx + wwx, prep.srs2[1]);
+    G1::mul(wwx, witness.wwx.c, challs.e);
+    pairing(left, witness.wx.c + wwx, prep.pk.g2[1]);
 
     G1 wx;
-    G1::mul(wx, witness.wx, challs.v);
-    G1::mul(wwx, witness.wwx, challs.v * omega * challs.e);
-    pairing(right, wx + wwx + F - E, prep.srs2[0]);
+    G1::mul(wx, witness.wx.c, challs.v);
+    G1::mul(wwx, witness.wwx.c, challs.v * omega * challs.e);
+    pairing(right, wx + wwx + F - E, prep.pk.g2[0]);
 
     return left == right;
 }

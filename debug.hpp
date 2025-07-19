@@ -1,3 +1,6 @@
+// This debug is used before KZG is implemented.
+// Some implementations will not work as expected.
+
 #include "ntt.hpp"
 #include "kzg.hpp"
 #include <mcl/bn.hpp>

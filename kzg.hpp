@@ -26,7 +26,7 @@ public:
     };
 };
 
-KZG::PublicKey setup(size_t t);
+KZG::PublicKey KZGSetup(size_t t, Fr x);
 
 KZG::Commitment commit(KZG::PublicKey pk, vector<Fr> q);
 
