@@ -2,7 +2,7 @@
 #include "ntt.hpp"
 #include "kzg.hpp"
 #include "debug.hpp"
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <sstream>
 #include <mcl/bn.hpp>
 #include <vector>
@@ -25,18 +25,40 @@ vector<uint8_t> toBytes(const G1 &g) {
 }
 
 Fr hashToFr(const vector<vector<uint8_t>>& inputs) {
-    SHA256_CTX ctx;
-    SHA256_Init(&ctx);
-
-    for (const auto& input : inputs) {
-        SHA256_Update(&ctx, input.data(), input.size());
+    // Create and initialize the digest context
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) {
+        throw runtime_error("Failed to create EVP_MD_CTX");
     }
-
-    uint8_t hash[32];
-    SHA256_Final(hash, &ctx);
-
+    
+    // Initialize the digest operation with SHA256
+    if (EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr) != 1) {
+        EVP_MD_CTX_free(ctx);
+        throw runtime_error("Failed to initialize SHA256 digest");
+    }
+    
+    // Update the digest with each input
+    for (const auto& input : inputs) {
+        if (EVP_DigestUpdate(ctx, input.data(), input.size()) != 1) {
+            EVP_MD_CTX_free(ctx);
+            throw runtime_error("Failed to update digest");
+        }
+    }
+    
+    // Finalize the digest
+    uint8_t hash[EVP_MAX_MD_SIZE];
+    unsigned int hash_len;
+    if (EVP_DigestFinal_ex(ctx, hash, &hash_len) != 1) {
+        EVP_MD_CTX_free(ctx);
+        throw runtime_error("Failed to finalize digest");
+    }
+    
+    // Clean up the context
+    EVP_MD_CTX_free(ctx);
+    
+    // Create and return the Fr result
     Fr result;
-    result.setArrayMask(hash, sizeof(hash));
+    result.setArrayMask(hash, hash_len); 
     return result;
 }
 
