@@ -1,6 +1,6 @@
-#include "plonk.hpp"
-#include "ntt.hpp" 
-#include "kzg.hpp"
+#include "include/plonk.hpp"
+#include "include/ntt.hpp" 
+#include "include/kzg.hpp"
 #include <mcl/bn.hpp>
 #include <iostream>
 #include <vector>

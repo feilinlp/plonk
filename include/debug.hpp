@@ -1,3 +1,4 @@
+// Makefile does not include compilation of this file.
 // This debug is used before KZG is implemented.
 // Some implementations will not work as expected.
 

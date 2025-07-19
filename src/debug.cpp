@@ -1,10 +1,11 @@
+// Makefile does not include compilation of this file.
 // This debug is used before KZG is implemented.
 // Some implementations will not work as expected.
 
-#include "plonk.hpp"
-#include "ntt.hpp"
-#include "kzg.hpp"
-#include "debug.hpp"
+#include "../include/plonk.hpp"
+#include "../include/ntt.hpp"
+#include "../include/kzg.hpp"
+#include "../include/debug.hpp"
 #include <mcl/bn.hpp>
 #include <vector>
 #include <map>

@@ -11,9 +11,9 @@ LDFLAGS = -L$(MCL_DIR)/lib -Wl,-rpath,$(shell pwd)/$(MCL_DIR)/lib
 LIBS = -lmcl -lgmp -lgmpxx -lcrypto
 
 # Source files
-PLONK_SRC = ./plonk.cpp
-NTT_SRC = ./ntt.cpp
-KZG_SRC = ./kzg.cpp
+PLONK_SRC = ./src/plonk.cpp
+NTT_SRC = ./src/ntt.cpp
+KZG_SRC = ./src/kzg.cpp
 
 # Test files
 TEST_SRC = ./test.cpp

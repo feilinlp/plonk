@@ -1,7 +1,7 @@
-#include "plonk.hpp"
-#include "ntt.hpp"
-#include "kzg.hpp"
-#include "debug.hpp"
+#include "../include/plonk.hpp"
+#include "../include/ntt.hpp"
+#include "../include/kzg.hpp"
+#include "../include/debug.hpp"
 #include <openssl/evp.h>
 #include <sstream>
 #include <mcl/bn.hpp>
@@ -531,7 +531,6 @@ void roundFive(Plonk::Transcript &ret, Plonk::Preprocess preprocess, Plonk::Chal
     ret.wwx = commit(preprocess.pk, ret.ww);
 }
 
-// Can be optimized by not converting back-and-forth polynomials from lagrange basis to monomial basis
 Plonk::Witness Plonk::prove(Plonk::Preprocess preprocess, size_t l, vector<Fr> w) {
     Plonk::Transcript transcript;
     Plonk::Witness ret;

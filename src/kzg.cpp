@@ -1,4 +1,4 @@
-#include "kzg.hpp"
+#include "../include/kzg.hpp"
 #include <mcl/bn.hpp>
 #include <mcl/lagrange.hpp>
 
