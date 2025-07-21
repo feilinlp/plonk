@@ -57,25 +57,7 @@ This implementation is based on the original PLONK paper:
 
 ## Current Limitations & Potential Improvements
 
-### 1. KZG Batch Evaluations
-
-**Current State**: Individual KZG verification for each polynomial evaluation
-
-```cpp
-// Current: Multiple individual checks
-verifyEval(pk, witness.ax, challs.v, witness.av);
-verifyEval(pk, witness.bx, challs.v, witness.bv);
-// ... 6 separate pairing operations
-```
-
-**Improvement Needed**: Implement batch verification to reduce pairing operations from O(k) to O(1)
-
-```cpp
-// Target: Single batched verification
-verifyBatch(pk, {commitments, points, evaluations, witnesses}, batch_challenge);
-```
-
-### 2. NTT Evaluations on Lagrange Basis
+### 1. NTT Evaluations on Lagrange Basis
 
 **Current State**: NTT operations performed in coefficient form
 

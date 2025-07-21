@@ -32,3 +32,5 @@ Fr evaluatePolynomial(vector<Fr> p, vector<Fr> x);
 vector<Fr> polynomialDivision(vector<Fr> a, size_t n);
 
 vector<Fr> addPolynomials(vector<Fr> a, vector<Fr> b);
+
+vector<KZG::BatchItem> addItems(Plonk::Preprocess prep, Plonk::Witness witness, Plonk::Verifier verifier, Plonk::Challenge challs);

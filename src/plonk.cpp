@@ -543,20 +543,29 @@ bool Plonk::verify(size_t n, Plonk::Preprocess prep, Plonk::Witness witness, siz
     // Compute challenge based on witness / transcript
     Plonk::Challenge challs = evaluateChalls(witness);
 
+    // Basic validity checks
     if (!witness.ax.c.isValid() || !witness.bx.c.isValid() || !witness.cx.c.isValid() || 
     !witness.zx.c.isValid() || !witness.lox.c.isValid() || !witness.midx.c.isValid() ||
     !witness.hix.c.isValid() || !witness.wx.c.isValid() || !witness.wwx.c.isValid()) return false;
 
-    if (!verifyEval(prep.pk, witness.ax, challs.v, witness.av) || 
-    !verifyEval(prep.pk, witness.bx, challs.v, witness.bv) || 
-    !verifyEval(prep.pk, witness.cx, challs.v, witness.cv) ||
-    !verifyEval(prep.pk, verifier.so1x, challs.v, witness.so1v) || 
-    !verifyEval(prep.pk, verifier.so2x, challs.v, witness.so2v) || 
-    !verifyEval(prep.pk, witness.zx, challs.v * prep.circuit.h[1], witness.zwv)) return false;
-
     for (size_t i = 1; i <= l; i++) if (!w[i].isValid()) return false;
 
-    cout << "✓ Data check passed\n";
+    // Prepare batch verification for KZG proofs
+    vector<KZG::BatchItem> items;
+    
+    // Add all KZG evaluations to batch
+    items = addItems(prep, witness, verifier, challs);
+
+    // Generate random coefficients for batch verification
+    vector<Fr> random_coeffs = generateRandomCoeffs(items.size());
+
+    // Perform batch verification of all KZG proofs
+    if (!verifyBatch(prep.pk, items, random_coeffs)) {
+        cout << "✗ KZG batch verification failed\n";
+        return false;
+    }
+
+    cout << "✓ KZG batch verification passed\n";
 
     // Compute zero polynomial evaluation
     Fr zhv;
@@ -652,6 +661,8 @@ bool Plonk::verify(size_t n, Plonk::Preprocess prep, Plonk::Witness witness, siz
     G1::mul(wx, witness.wx.c, challs.v);
     G1::mul(wwx, witness.wwx.c, challs.v * omega * challs.e);
     pairing(right, wx + wwx + F - E, prep.pk.g2[0]);
+
+    cout << "✓ Final pairing check: " << (left == right ? "PASSED" : "FAILED") << "\n";
 
     return left == right;
 }

@@ -24,6 +24,13 @@ public:
         G1 w; // Witness
         Fr qi; // Evaluated value
     };
+
+    struct BatchItem {
+        Commitment commitment;
+        Fr point;
+        Fr value;
+        Witness witness;
+    };
 };
 
 KZG::PublicKey KZGSetup(size_t t, Fr x);
@@ -37,5 +44,9 @@ vector<Fr> divideByLinear(vector<Fr> q, Fr i);
 KZG::Witness createWitness(KZG::PublicKey pk, vector<Fr> q, Fr i);
 
 bool verifyEval(KZG::PublicKey pk, KZG::Commitment comm, Fr i, KZG::Witness witness);
+
+vector<Fr> generateRandomCoeffs(size_t count);
+
+bool verifyBatch(KZG::PublicKey pk, const vector<KZG::BatchItem>& batch_items, const vector<Fr>& random_coeffs);
 
 #endif // KZG_HPP

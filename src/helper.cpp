@@ -134,3 +134,52 @@ vector<Fr> addPolynomials(vector<Fr> a, vector<Fr> b) {
 
     return ret;
 }
+
+vector<KZG::BatchItem> addItems(Plonk::Preprocess prep, Plonk::Witness witness, Plonk::Verifier verifier, Plonk::Challenge challs) {
+    vector<KZG::BatchItem> items;
+    
+    // Add a(v)
+    KZG::BatchItem item;
+    item.commitment = witness.ax;
+    item.point = challs.v;
+    item.value = witness.av.qi;
+    item.witness = witness.av;
+    items.push_back(item);
+
+    // Add b(v)
+    item.commitment = witness.bx;
+    item.point = challs.v;
+    item.value = witness.bv.qi;
+    item.witness = witness.bv;
+    items.push_back(item);
+
+    // Add c(v)
+    item.commitment = witness.cx;
+    item.point = challs.v;
+    item.value = witness.cv.qi;
+    item.witness = witness.cv;
+    items.push_back(item);
+
+    // Add so1(v)
+    item.commitment = verifier.so1x;
+    item.point = challs.v;
+    item.value = witness.so1v.qi;
+    item.witness = witness.so1v;
+    items.push_back(item);
+
+    // Add so2(v)
+    item.commitment = verifier.so2x;
+    item.point = challs.v;
+    item.value = witness.so2v.qi;
+    item.witness = witness.so2v;
+    items.push_back(item);
+
+    // Add z(wv)
+    item.commitment = witness.zx;
+    item.point = challs.v * prep.circuit.h[1];
+    item.value = witness.zwv.qi;
+    item.witness = witness.zwv;
+    items.push_back(item);
+
+    return items;
+}

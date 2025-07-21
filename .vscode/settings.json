@@ -57,7 +57,7 @@
     "xutility": "cpp",
     "random": "cpp"
   },
-  "cSpell.words": ["challs", "CSPRNG", "INTT"],
+  "cSpell.words": ["challs", "coeffs", "CSPRNG", "INTT"],
   "cmake.sourceDirectory": "C:/Users/feili/projects/plonk/mcl",
   "C_Cpp.errorSquiggles": "disabled"
 }
