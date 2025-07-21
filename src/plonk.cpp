@@ -189,126 +189,146 @@ void roundThree(Plonk::Transcript &ret, Plonk::Preprocess preprocess, size_t l, 
     size_t n = preprocess.circuit.n;
     Fr omega = preprocess.circuit.h[1];
     
-    ret.t.resize(3 * n + 5, 0);
+    // Determine the target size for NTT operations (must be power of 2)
+    size_t ntt_size = 1;
+    while (ntt_size < 3 * n + 5) ntt_size *= 2;
 
-    // Constraint
-    vector<Fr> temp, _;
-
-    temp = polynomial_multiply(ret.a, ret.b);
-    temp = polynomial_multiply(temp, preprocess.qm);
-
-    _ = polynomial_multiply(ret.a, preprocess.ql);
-    temp = addPolynomials(temp, _);
+    Fr ntt_omega = getRootOfUnity(ntt_size);
     
-    _.clear();
-    _ = polynomial_multiply(ret.b, preprocess.qr);
-    temp = addPolynomials(temp, _);
+    // Convert all polynomials to NTT domain once
+    vector<Fr> a_ntt = to_ntt_domain(ret.a, ntt_size, ntt_omega);
+    vector<Fr> b_ntt = to_ntt_domain(ret.b, ntt_size, ntt_omega);
+    vector<Fr> c_ntt = to_ntt_domain(ret.c, ntt_size, ntt_omega);
+    vector<Fr> z_ntt = to_ntt_domain(ret.z, ntt_size, ntt_omega);
     
-    _.clear();
-    _ = polynomial_multiply(ret.c, preprocess.qo);
-    temp = addPolynomials(temp, _);
+    vector<Fr> qm_ntt = to_ntt_domain(preprocess.qm, ntt_size, ntt_omega);
+    vector<Fr> ql_ntt = to_ntt_domain(preprocess.ql, ntt_size, ntt_omega);
+    vector<Fr> qr_ntt = to_ntt_domain(preprocess.qr, ntt_size, ntt_omega);
+    vector<Fr> qo_ntt = to_ntt_domain(preprocess.qo, ntt_size, ntt_omega);
+    vector<Fr> qc_ntt = to_ntt_domain(preprocess.qc, ntt_size, ntt_omega);
+    
+    vector<Fr> so1_ntt = to_ntt_domain(preprocess.so1, ntt_size, ntt_omega);
+    vector<Fr> so2_ntt = to_ntt_domain(preprocess.so2, ntt_size, ntt_omega);
+    vector<Fr> so3_ntt = to_ntt_domain(preprocess.so3, ntt_size, ntt_omega);
+    
+    // Evaluate t
+    vector<Fr> t_ntt(ntt_size, Fr(0)), temp, _;
 
-    temp = addPolynomials(temp, preprocess.qc);
+    temp = a_ntt;
+    polynomial_multiply_ntt(temp, b_ntt);
+    polynomial_multiply_ntt(temp, qm_ntt);
+    polynomial_add_ntt(t_ntt, temp);
 
+    temp.clear(); temp = a_ntt;
+    polynomial_multiply_ntt(temp, ql_ntt);
+    polynomial_add_ntt(t_ntt, temp);
+
+    temp.clear(); temp = b_ntt;
+    polynomial_multiply_ntt(temp, qr_ntt);
+    polynomial_add_ntt(t_ntt, temp);
+
+    temp.clear(); temp = c_ntt;
+    polynomial_multiply_ntt(temp, qo_ntt);
+    polynomial_add_ntt(t_ntt, temp);
+
+    polynomial_add_ntt(t_ntt, qc_ntt);
+
+    // Evaluate PI
     vector<Fr> pi(n + 1, 0);
-
     for (size_t i = 1; i <= l; i++) {
         for (size_t j = 0; j < preprocess.lagrange[i].size(); j++) {
             pi[j] -= preprocess.lagrange[i][j] * w[i];
         }
     }
-
     ret.pi = pi;
-
-    ret.t = addPolynomials(ret.t, temp);
+    
+    // Convert PI to NTT domain properly
+    vector<Fr> pi_ntt = to_ntt_domain(pi, ntt_size, ntt_omega);
+    polynomial_add_ntt(t_ntt, pi_ntt);
 
     // Checks for Round 2 polynomials
     // First part
-    temp.clear();
-    temp.assign(ret.a.begin(), ret.a.end());
-    temp[1] += challs.beta; temp[0] += challs.gamma;
+    temp.clear(); temp = a_ntt;
+    _.clear(); _.resize(ntt_size, Fr(0));
+    _[1] = challs.beta; _[0] = challs.gamma;
+    ntt_transform(_, ntt_omega); 
+    polynomial_add_ntt(temp, _);
 
-    _.clear();
-    _.assign(ret.b.begin(), ret.b.end());
-    _[1] += challs.beta * preprocess.circuit.k1; _[0] += challs.gamma;
-    temp = polynomial_multiply(temp, _);
+    _.clear(); _.resize(ntt_size, Fr(0));
+    _[1] = challs.beta * preprocess.circuit.k1; _[0] = challs.gamma;
+    ntt_transform(_, ntt_omega); 
+    polynomial_add_ntt(_, b_ntt);
+    polynomial_multiply_ntt(temp, _);
 
-    _.clear();
-    _.assign(ret.c.begin(), ret.c.end());
-    _[1] += challs.beta * preprocess.circuit.k2; _[0] += challs.gamma;
-    temp = polynomial_multiply(temp, _);
+    _.clear(); _.resize(ntt_size, Fr(0));
+    _[1] = challs.beta * preprocess.circuit.k2; _[0] = challs.gamma;
+    ntt_transform(_, ntt_omega); 
+    polynomial_add_ntt(_, c_ntt);
+    polynomial_multiply_ntt(temp, _);
 
-    temp = polynomial_multiply(temp, ret.z);
-
-    for (size_t i = 0; i < temp.size(); i++) { temp[i] *= challs.alpha; }
-
-    ret.t = addPolynomials(ret.t, temp);
+    polynomial_multiply_ntt(temp, z_ntt);
+    polynomial_scale_ntt(temp, challs.alpha);
+    polynomial_add_ntt(t_ntt, temp);
 
     // Second part
-    vector<Fr> zw;
-    zw.assign(ret.z.begin(), ret.z.end());
+    vector<Fr> gamma_ntt(ntt_size, Fr(0));
+    gamma_ntt[0] = challs.gamma; 
+    ntt_transform(gamma_ntt, ntt_omega); 
 
-    vector<Fr> so1, so2, so3;
-    so1.assign(preprocess.so1.begin(), preprocess.so1.end());
-    so2.assign(preprocess.so2.begin(), preprocess.so2.end());
-    so3.assign(preprocess.so3.begin(), preprocess.so3.end());
+    temp.clear(); temp = so1_ntt;
+    polynomial_scale_ntt(temp, challs.beta);
+    polynomial_add_ntt(temp, gamma_ntt);
+    polynomial_add_ntt(temp, a_ntt);
 
-    for (size_t i = 0; i < so1.size(); i++) { so1[i] *= challs.beta; }
-    for (size_t i = 0; i < so2.size(); i++) { so2[i] *= challs.beta; }
-    for (size_t i = 0; i < so3.size(); i++) { so3[i] *= challs.beta; }
+    _.clear(); _ = so2_ntt;
+    polynomial_scale_ntt(_, challs.beta);
+    polynomial_add_ntt(_, gamma_ntt);
+    polynomial_add_ntt(_, b_ntt);
+    polynomial_multiply_ntt(temp, _);
 
-    // Calculate z(Xw)
-    for (size_t i = 1; i < zw.size(); i++) { 
-        Fr hp;
-        Fr::pow(hp, preprocess.circuit.h[1], i);
-        zw[i] *= hp; 
-    }
-
-    temp.clear();
-    temp.assign(ret.a.begin(), ret.a.end());
-    for (size_t i = 0; i < so1.size(); i++) { temp[i] += so1[i]; }
-    temp[0] += challs.gamma;
-
-    _.clear();
-    _.assign(ret.b.begin(), ret.b.end());
-    for (size_t i = 0; i < so2.size(); i++) { _[i] += so2[i]; }
-    _[0] += challs.gamma;
-    temp = polynomial_multiply(temp, _);
-
-    _.clear();
-    _.assign(ret.c.begin(), ret.c.end());
-    for (size_t i = 0; i < so3.size(); i++) { _[i] += so3[i]; }
-    _[0] += challs.gamma;
-    temp = polynomial_multiply(temp, _);
-
-    temp = polynomial_multiply(temp, zw);
-
-    for (size_t i = 0; i < temp.size(); i++) { temp[i] *= -challs.alpha; }
-
-    ret.t = addPolynomials(ret.t, temp);
-
-    // Induction base case check
-    ret.z[0] -= 1;
-    temp.clear();
-    temp = polynomial_multiply(ret.z, preprocess.lagrange[1]);
-    for (size_t i = 0; i < temp.size(); i++) { temp[i] *= challs.alpha * challs.alpha; }
-    ret.z[0] += 1;
-
-    ret.t = addPolynomials(ret.t, temp);
+    _.clear(); _ = so3_ntt;
+    polynomial_scale_ntt(_, challs.beta);
+    polynomial_add_ntt(_, gamma_ntt);
+    polynomial_add_ntt(_, c_ntt);
+    polynomial_multiply_ntt(temp, _);
     
-    vector<Fr> temp_t;
-    temp_t = polynomialDivision(ret.t, n); // Divide by ZH
+    vector<Fr> zw_ntt = ret.z;
+    for (size_t i = 1; i < ret.z.size(); i++) {
+        Fr temp;
+        Fr::pow(temp, omega, i);
+        zw_ntt[i] *= temp; 
+    }
+    zw_ntt.resize(ntt_size, Fr(0));
+    zw_ntt = to_ntt_domain(zw_ntt, ntt_size, ntt_omega);
 
-    vector<Fr> zh(n+1, 0); zh[n] = 1; zh[0] = -1;
+    polynomial_multiply_ntt(temp, zw_ntt);
+    polynomial_scale_ntt(temp, -challs.alpha);
+    polynomial_add_ntt(t_ntt, temp);
 
-    temp.clear();
-    temp = polynomial_multiply(temp_t, zh);
+    // Induction base case
+    temp.clear(); temp = z_ntt;
+    _.clear(); _.resize(ntt_size, Fr(0));
+    _[0] = -1;
+    ntt_transform(_, ntt_omega); 
+    polynomial_add_ntt(temp, _);
+    
+    vector<Fr> l1_ntt = to_ntt_domain(preprocess.lagrange[1], ntt_size, ntt_omega);
+    polynomial_multiply_ntt(temp, l1_ntt);
+    polynomial_scale_ntt(temp, challs.alpha * challs.alpha);
+    
+    polynomial_add_ntt(t_ntt, temp);
+    
+    // Convert t back to coefficient form
+    ntt_inverse(t_ntt, ntt_omega);
+    ret.t = t_ntt;
 
-    ret.t.clear();
-    ret.t.assign(temp_t.begin(), temp_t.end());
-
+    // Divide by ZH
+    ret.t = polynomialDivision(ret.t, n);
+    
+    // Split t polynomial
     split(ret, n, b);
-
+    
+    // Commit to the pieces
     ret.lox = commit(preprocess.pk, ret.lo);
     ret.midx = commit(preprocess.pk, ret.mid);
     ret.hix = commit(preprocess.pk, ret.hi);

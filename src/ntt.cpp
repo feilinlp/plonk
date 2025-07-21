@@ -99,3 +99,36 @@ vector<Fr> polynomial_multiply(vector<Fr> A, vector<Fr> B) {
 
     return C;
 }
+
+// Direct polynomial multiplication in NTT domain
+void polynomial_multiply_ntt(vector<Fr> &A_ntt, const vector<Fr> &B_ntt) {
+    assert(A_ntt.size() == B_ntt.size());
+    for (size_t i = 0; i < A_ntt.size(); i++) {
+        A_ntt[i] *= B_ntt[i];
+    }
+}
+
+// Add polynomials in NTT domain
+void polynomial_add_ntt(vector<Fr> &A_ntt, const vector<Fr> &B_ntt) {
+    assert(A_ntt.size() == B_ntt.size());
+    for (size_t i = 0; i < A_ntt.size(); i++) {
+        A_ntt[i] += B_ntt[i];
+    }
+}
+
+// Scale polynomial in NTT domain
+void polynomial_scale_ntt(vector<Fr> &A_ntt, const Fr &scalar) {
+    for (size_t i = 0; i < A_ntt.size(); i++) {
+        A_ntt[i] *= scalar;
+    }
+}
+
+// Convert polynomial to NTT domain with proper padding
+vector<Fr> to_ntt_domain(const vector<Fr> &poly, size_t target_size, Fr omega) {
+    vector<Fr> result(target_size, Fr(0));
+    for (size_t i = 0; i < min(poly.size(), target_size); i++) {
+        result[i] = poly[i];
+    }
+    ntt_transform(result, omega);
+    return result;
+}

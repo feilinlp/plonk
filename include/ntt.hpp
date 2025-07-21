@@ -57,4 +57,18 @@ void ntt_inverse(vector<Fr> &A, Fr omega);
  */
 vector<Fr> polynomial_multiply(vector<Fr> A, vector<Fr> B);
 
+Fr getRootOfUnity(size_t n);
+
+// Direct polynomial multiplication in NTT domain
+void polynomial_multiply_ntt(vector<Fr> &A_ntt, const vector<Fr> &B_ntt);
+
+// Add polynomials in NTT domain
+void polynomial_add_ntt(vector<Fr> &A_ntt, const vector<Fr> &B_ntt);
+
+// Scale polynomial in NTT domain
+void polynomial_scale_ntt(vector<Fr> &A_ntt, const Fr &scalar);
+
+// Convert polynomial to NTT domain with proper padding
+vector<Fr> to_ntt_domain(const vector<Fr> &poly, size_t target_size, Fr omega);
+
 #endif // NTT_HPP

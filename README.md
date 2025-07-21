@@ -55,24 +55,6 @@ This implementation is based on the original PLONK paper:
 - **Random Linear Combinations**: Batch multiple polynomial checks efficiently
 - **Fiat-Shamir**: Derive verifier challenges from proof transcript
 
-## Current Limitations & Potential Improvements
-
-### 1. NTT Evaluations on Lagrange Basis
-
-**Current State**: NTT operations performed in coefficient form
-
-```cpp
-// Current: Convert between coefficient and evaluation form
-ntt_inverse(e, omega); // Coefficient to evaluation
-```
-
-**Improvement Needed**: Direct NTT operations on Lagrange basis polynomials
-
-```cpp
-// Target: Native Lagrange basis operations
-lagrange_ntt(lagrange_poly, omega); // Direct Lagrange NTT
-```
-
 ## References
 
 1. Gabizon, A., Williamson, Z. J., & Ciobotaru, O. (2019). PLONK: Permutations over Lagrange-bases for Oecumenical Noninteractive arguments of Knowledge. Cryptology ePrint Archive, Report 2019/953. https://eprint.iacr.org/2019/953.pdf
